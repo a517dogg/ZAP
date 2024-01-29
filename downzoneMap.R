@@ -1,7 +1,7 @@
 downzoned <- parcelsJoin %>%
   filter(
     (NAME == "LDR" & CATEGORY != "R-1 Low Density Residential") |
-      (NAME == "MDR" & CATEGORY != "R-1 Low Density Residential" & CATEGORY != "R-2 Medium Density Residential")
+      (NAME == "MDR" & CATEGORY != "R-1 Low Density Residential" & CATEGORY != "R-2 Medium Density Residential" & CATEGORY != "URD Urban Renewal District")
   ) %>%
   mutate(
     NewlyNonConforming = case_when(
