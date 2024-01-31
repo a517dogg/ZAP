@@ -143,7 +143,7 @@ areaSankey <- plot_ly(
     yaxis = list(showgrid = F, zeroline = F, title = "", showticklabels = FALSE)
   )
 
-htmlwidgets::saveWidget(countSankey, file = "~/ZAP/areaSankey.html")
+htmlwidgets::saveWidget(areaSankey, file = "~/ZAP/areaSankey.html")
 
 valueSankey <- plot_ly(
   type = "sankey",
@@ -169,4 +169,4 @@ valueSankey <- plot_ly(
     yaxis = list(showgrid = F, zeroline = F, title = "", showticklabels = FALSE)
   )
 
-htmlwidgets::saveWidget(countSankey, file = "~/ZAP/valueSankey.html")
+htmlwidgets::saveWidget(valueSankey, file = "~/ZAP/valueSankey.html")
