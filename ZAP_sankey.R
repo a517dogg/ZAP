@@ -121,3 +121,52 @@ countSankey <- plot_ly(
 
 htmlwidgets::saveWidget(countSankey, file = "~/ZAP/countSankey.html")
 
+areaSankey <- plot_ly(
+  type = "sankey",
+  domain = list(c(x = c(0, 1), y = c(0, 1))),
+  orientation = "h",
+  arrangement = "snap",
+  node = list(
+    label = nodeswithnums$nodename,
+    pad = 15, 
+    thickness = 15
+  ),
+  link = list(
+    source = flowvals$sourcenode,
+    target = flowvals$targetnode,
+    value = units::set_units(flowvals$parcelArea, "acres")
+  )
+) %>%
+  layout(
+    title = "Areas of parcels (in acres) moving from current zoning to ZAP",
+    xaxis = list(showgrid = F, zeroline = F, title = "", showticklabels = FALSE),
+    yaxis = list(showgrid = F, zeroline = F, title = "", showticklabels = FALSE)
+  )
+
+htmlwidgets::saveWidget(countSankey, file = "~/ZAP/areaSankey.html")
+
+valueSankey <- plot_ly(
+  type = "sankey",
+  domain = list(c(x = c(0, 1), y = c(0, 1))),
+  orientation = "h",
+  arrangement = "snap",
+  # hovertext = ~paste0("$", flowvals$parcelValue, " moving from ", flowvals$CATEGORY, " to ", flowvals$NAME),
+  valueformat = "$,g",
+  node = list(
+    label = nodeswithnums$nodename,
+    pad = 15, 
+    thickness = 15
+  ),
+  link = list(
+    source = flowvals$sourcenode,
+    target = flowvals$targetnode,
+    value = flowvals$parcelValue
+  )
+) %>%
+  layout(
+    title = "Assessed value of parcels (in acres) moving from current zoning to ZAP",
+    xaxis = list(showgrid = F, zeroline = F, title = "", showticklabels = FALSE),
+    yaxis = list(showgrid = F, zeroline = F, title = "", showticklabels = FALSE)
+  )
+
+htmlwidgets::saveWidget(countSankey, file = "~/ZAP/valueSankey.html")

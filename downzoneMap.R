@@ -31,7 +31,12 @@ downzoneMap <- leaflet(downzoned %>% st_transform(4326)) %>%
   addPolygons(
     popup = ~popup, 
     weight = ~weight,
-    color = ~fill, fill = TRUE)
+    color = ~fill, fill = TRUE) %>%
+  addLegend(
+    "topright",
+    title = "Areas downzoned by ZAP",
+    colors = c("Orange", "Blue"), labels = c("Downzoned to MDR", "Downzoned to LDR")
+  )
 
 htmlwidgets::saveWidget(downzoneMap, file = "~/ZAP/downzoneMap.html")
 

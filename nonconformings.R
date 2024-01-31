@@ -11,6 +11,10 @@ conformings <- parcelsJoin %>%
       NAME == "MDR" & CLASSDSCRP %in% MDRclasses ~ TRUE,
       NAME == "MDR" & ! CLASSDSCRP %in% MDRclasses ~ FALSE,
       TRUE ~ NA
+    ),
+    ConformingCurrent = case_when(
+      CATEGORY == "R-1 Low Density Residential" & CLASSDSCRP %in% LDRclasses ~ TRUE,
+      CATEGORY == "R-1 Low Density Residential" & ! CLASSDSCRP %in% LDRclasses ~ FALSE,
     )
   )
 
@@ -22,16 +26,25 @@ nonconformingLDR <- conformings %>%
     popup = paste0(
       SITEADDRES, "<br>",
       "Nonconforming because:", "<br>",
-      CLASSDSCRP
+      CLASSDSCRP, " in ", NAME
     )
   )
 
 nonconformingMap <- leaflet(nonconformingLDR %>% st_transform(4326)) %>%
-  addProviderTiles(providers$Esri.WorldStreetMap) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addPolygons(
+    data = ZAP %>% filter(NAME == "LDR") %>% st_transform(4326),
+    weight = .1, opacity = .1, color = "Grey"
+  ) %>%
   addPolygons(
     weight = .2, 
     fill = TRUE,
     popup = ~popup
+  ) %>%
+  addLegend(
+    title = "Non conforming uses in LDR",
+    "topright",
+    colors = c("Grey", "Blue"), labels = c("LDR zones", "Non conforming parcels")
   )
 
 htmlwidgets::saveWidget(nonconformingMap, file = "~/ZAP/nonconformingMap.html")
