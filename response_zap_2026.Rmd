@@ -1,0 +1,108 @@
+output:
+    html_document:
+        toc: true
+        theme: cosmo
+author: Adrian Martin, Rochester NY
+
+## ZAP Feedback
+
+I am writing this page as feedback to the Rochester City Planning Commission on the Zoning Alignment Project release of 2026. Feedback for the [June 10th meeting](https://rochesterzap.com/2026/05/13/city-planning-commission-and-rochester-environmental-commission-meeting-dates-announced/) is due June 9th, 4PM. This will be emailed to the commission, but also posted on github for public access and reproducibility.
+
+My feedback looks at a few areas that I am concerned about:
+- Downzoning specific neighborhoods
+- Large numbers of parcels remaining non-compliant with zoning that does not reflect the current or desired (as per the Roc2034 comprehensive plan) character of that neighborhood
+
+In addition to feedback on the ZAP plan, I also want to stress that I banged this analysis out in a few days because the city refused to proactively post the ZAP zoning file and required me to FOIL it (FOIL 2026-2176 filed Apr 20 2026). They then granted themselves an extension on that FOIL request (May 18 2026), despite the request requiring zero redaction or processing. I finally received the data on June 1st, 2026. This mirrored the process for releasing the 2023 ZAP zoning file (FOIL 2023-6693, filed Oct 29 2023, released Jan 26 2024, comment deadline was Jan 31 2024).
+The city has a good open data portal, which I pull the current zoning file from. The city refused to provide any draft zoning file unless I filed a FOIL and declined to explain their reasoning. There is no reason that the city should not have proactively posted the ZAP file to the open data portal back in April, when they released their plans. This whole process was extremely frustrating.
+
+```{r setup, include=FALSE}
+
+library(tidyverse)
+library(sf)
+library(plotly)
+
+```
+
+```{r loaddata, message = FALSE, warning = FALSE}
+
+# note: files are transformed to a projected coordinate system
+# this is necessary for accurate spatial joins, calculating areas/distances, etc.
+# leaflet requires lat/lon, so I transform to 4326 after the math is done
+
+current_zoning <- read_sf("https://maps.cityofrochester.gov/server/rest/services/Open_Data/Zoning_Districts_Open_Data/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson") %>%
+    rename(Zoning_current = LABEL) %>%
+    st_transform(6541)
+
+parcels_2022 <- read_sf("https://maps.cityofrochester.gov/server2/rest/services/Open_Data/TaxParcel2022/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson") %>% 
+    st_transform(6541)
+
+zap_2023 <- read_sf("DRAFT_ZAP_Districts_Sept2023/DRAFT_ZAP_DISTRICTS_Sept2023.shp") %>%
+    rename(Zoning_2023 = NAME) %>%
+    st_transform(6541)
+
+zap_2026 <- read_sf("ZAP_Districts_final_draft_Apr26.shp") %>%
+    rename(Zoning_2026 = NAME) %>%
+    st_transform(6541)
+
+# for plotting
+ZAPwgs <- zap_2026 %>% st_transform(4326) %>%
+  # don't plot the airport overlay
+  filter(Zoning_2026 != "O-A")
+
+```
+
+```{r analysis}
+
+zoningAreas <- current_zoning %>% 
+  mutate(area = st_area(current_zoning)) %>%
+  group_by(CATEGORY) %>%
+  summarize(
+    totalarea = sum(area),
+    numDistricts = n()
+  ) %>%
+  st_drop_geometry() %>%
+  mutate(acres= units::set_units(totalarea, "acres")) %>%
+  arrange(desc(totalarea))
+
+ZAPareas <- zap_2026 %>% 
+  dplyr::filter(Zoning_2026 != "O-A") %>% #airport overlay not relevant
+  mutate(area = st_area(zap_2026 %>% dplyr::filter(Zoning_2026 != "O-A"))) %>% 
+  group_by(Zoning_2026) %>%
+  summarize(
+    totalarea = sum(area),
+    numDistricts = n()
+  ) %>%
+  st_drop_geometry() %>%
+  mutate(acres = units::set_units(totalarea, "acres")) %>%
+  arrange(desc(totalarea))
+
+parcelsJoin <- parcels_2022 %>% 
+  mutate(parcelArea = st_area(.)) %>%
+  st_join(zap_2026, st_overlaps, largest = TRUE) %>%
+  #st_join(st_make_valid(ZAPwgs), st_overlaps) %>%
+  st_join(current_zoning, st_overlaps, largest = TRUE)
+
+parcelsSummed <- parcelsJoin %>% 
+  group_by(CATEGORY, Zoning_2026) %>% 
+  st_drop_geometry() %>%
+  summarize(
+    parcelCount = n(), 
+    parcelArea = sum(parcelArea),
+    parcelValue = sum(CURRENT_TOTAL_VALUE))
+
+```
+
+### Downzoning
+
+
+
+### Non-compliance
+
+
+### Data & Reproducibility
+
+All data used in this analysis is available either via the city's open data portal or the city's FOIL website. All tools in this analysis are open source. All code is posted to github. Anyone is free to reproduce and hopefully improve this analysis.
+
+2026 ZAP zoning file released via FOIL: [download here](https://rochesterny.justfoia.com/Attachments/Download/d1d0f25a-662a-4745-963e-d2fe7797b560)
+
+2023 ZAP zoning file also released via FOIL: [download here]()
