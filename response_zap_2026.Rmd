@@ -306,7 +306,21 @@ nonconformingMap
 
 ```
 
+The above map shows LDR zones in the proposed 2026 ZAP plan, and highlights parcels that are non-conforming. I label a parcel as non-conforming in LDR if it is something other than a single family house, residential vacant land, an inn/lodge, a detached row building, or an aged home. This is an undercount because it only shows parcels that are non-conforming because of their land use class, but there are also parcels that are non-conforming because of size, setbacks, etc.
 
+Why does it matter if a parcel is non-conforming? If an apartment building in an LDR zone is damaged by weather or fire, it cannot be rebuilt as an apartment building. Those homes will be lost and the residing families will be displaced.
+
+What's the cause of most of the non-conforming parcels in the above map?
+
+```{r nonconformingCases}
+
+conformings %>% 
+  filter(Zoning_2026 == "LDR") %>% 
+  st_drop_geometry() %>% 
+  count(Conforming, ConformingCurrent) %>%
+  pivot_wider(names_from = Conforming, values_from = n) 
+
+```
 
 ### Data & Reproducibility
 
