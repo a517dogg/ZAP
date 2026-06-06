@@ -13,9 +13,11 @@ My feedback looks at a few areas that I am concerned about:
 - Large numbers of parcels remaining non-compliant with zoning that does not reflect the current or desired (as per the Roc2034 comprehensive plan) character of that neighborhood
 
 In addition to feedback on the ZAP plan, I also want to stress that I banged this analysis out in a few days because the city refused to proactively post the ZAP zoning file and required me to FOIL it (FOIL 2026-2176 filed Apr 20 2026). They then granted themselves an extension on that FOIL request (May 18 2026), despite the request requiring zero redaction or processing. I finally received the data on June 1st, 2026. This mirrored the process for releasing the 2023 ZAP zoning file (FOIL 2023-6693, filed Oct 29 2023, released Jan 26 2024, comment deadline was Jan 31 2024).
-The city has a good open data portal, which I pull the current zoning file from. The city refused to provide any draft zoning file unless I filed a FOIL and declined to explain their reasoning. There is no reason that the city should not have proactively posted the ZAP file to the open data portal back in April, when they released their plans. This whole process was extremely frustrating.
+The city has a good open data portal, which I pull the current zoning file from. The city refused to provide any draft zoning file unless I filed a FOIL, and they declined to explain the reasoning behind their refusal. I know of no reason to prevent the city from proactively postoing the ZAP file to the open data portal back in April, when they released their plans. This whole process was extremely frustrating.
 
 ```{r setup, include=FALSE}
+
+options(cache = TRUE)
 
 library(tidyverse)
 library(sf)
@@ -88,15 +90,222 @@ parcelsSummed <- parcelsJoin %>%
   summarize(
     parcelCount = n(), 
     parcelArea = sum(parcelArea),
-    parcelValue = sum(CURRENT_TOTAL_VALUE))
+    parcelValue = sum(CURRENT_TOTAL_VALUE, na.rm = TRUE)) # 59 parcels with NA value
 
 ```
 
+### Changes in total {.tabset}
+
+```{r countsSankey}
+
+nodeswithnums <- tibble(
+  nodename = c(unique(parcelsSummed$CATEGORY),
+               unique(parcelsSummed$Zoning_2026)),
+  type = c(rep("Current zoning", times = length(unique(parcelsSummed$CATEGORY))),
+           rep("ZAP_2026", times = length(unique(parcelsSummed$Zoning_2026))))
+) %>%
+  mutate(nodenumber = row_number() - 1)
+
+flowvals <- parcelsSummed %>%
+  left_join(
+    nodeswithnums %>% 
+      filter(type == "Current zoning") %>%
+      dplyr::select(-type),
+    by = c("CATEGORY" = "nodename")
+  ) %>% 
+  rename("sourcenode" = "nodenumber") %>%
+  left_join(
+    nodeswithnums %>%
+      filter(type == "ZAP_2026") %>%
+      dplyr::select(-type),
+    by = c("Zoning_2026" = "nodename")
+  ) %>%
+  rename("targetnode" = "nodenumber")
+
+countSankey <- plot_ly(
+  type = "sankey",
+  domain = list(c(x = c(0, 1), y = c(0, 1))),
+  orientation = "h",
+  arrangement = "snap",
+  node = list(
+    label = nodeswithnums$nodename,
+    pad = 15, 
+    thickness = 15
+  ),
+  link = list(
+    source = flowvals$sourcenode,
+    target = flowvals$targetnode,
+    value = flowvals$parcelCount
+  )
+) %>%
+  layout(
+    title = "Counts of parcels moving from current zoning to 2026 ZAP",
+    xaxis = list(showgrid = F, zeroline = F, title = "", showticklabels = FALSE),
+    yaxis = list(showgrid = F, zeroline = F, title = "", showticklabels = FALSE)
+  )
+
+areaSankey <- plot_ly(
+  type = "sankey",
+  domain = list(c(x = c(0, 1), y = c(0, 1))),
+  orientation = "h",
+  arrangement = "snap",
+  node = list(
+    label = nodeswithnums$nodename,
+    pad = 15, 
+    thickness = 15
+  ),
+  link = list(
+    source = flowvals$sourcenode,
+    target = flowvals$targetnode,
+    value = units::set_units(flowvals$parcelArea, "acres")
+  )
+) %>%
+  layout(
+    title = "Areas of parcels (in acres) moving from current zoning to ZAP",
+    xaxis = list(showgrid = F, zeroline = F, title = "", showticklabels = FALSE),
+    yaxis = list(showgrid = F, zeroline = F, title = "", showticklabels = FALSE)
+  )
+
+valueSankey <- plot_ly(
+  type = "sankey",
+  domain = list(c(x = c(0, 1), y = c(0, 1))),
+  orientation = "h",
+  arrangement = "snap",
+  node = list(
+    label = nodeswithnums$nodename,
+    pad = 15, 
+    thickness = 15
+  ),
+  link = list(
+    source = flowvals$sourcenode,
+    target = flowvals$targetnode,
+    value = flowvals$parcelValue
+  )
+) %>%
+  layout(
+    title = "Values of parcels (in USD) moving from current zoning to ZAP",
+    xaxis = list(showgrid = F, zeroline = F, title = "", showticklabels = FALSE),
+    yaxis = list(showgrid = F, zeroline = F, title = "", showticklabels = FALSE)
+  )
+
+# units calcs for areas
+
+area_sf = flowvals %>% filter(CATEGORY == "R-1 Low Density Residential") %>% pull(parcelArea) %>% sum()
+area_acres = units::set_units(area_sf, "acres")
+
+countR1 = flowvals %>% 
+  group_by(
+    R1 = CATEGORY == "R-1 Low Density Residential" & Zoning_2026 == "LDR") %>% 
+  summarize(count = sum(parcelCount)) %>%
+  mutate(percent = 100 * count / sum(count))
+
+areaR1 = flowvals %>% 
+  group_by(
+    R1 = CATEGORY == "R-1 Low Density Residential" & Zoning_2026 == "LDR") %>%
+  summarize(area = sum(parcelArea)) %>%
+  mutate(percent = 100 * area / sum(area))
+
+valueR1 = flowvals %>% 
+  group_by(
+    R1 = CATEGORY == "R-1 Low Density Residential" & Zoning_2026 == "LDR") %>%
+  summarize(value = sum(parcelValue)) %>%
+  mutate(percent = 100 * value / sum(value))
+
+```
+
+### Changes by count
+
+```{r countsSankeyPlot, echo = FALSE}
+countSankey
+```
+
+### Changes by area
+
+```{r areaSankeyPlot, echo = FALSE}
+areaSankey
+```
+
+### Changes by value
+
+```{r valueSankeyPlot, echo = FALSE}
+valueSankey
+```
+
+## Changes in total analysis
+
+The above sankey plots shows the flow of parcels by count (the first) and by area (the second) from current zoning to the 2026 ZAP proposal. The majority of current parcels by count (`r countR1 %>% filter(R1 == TRUE) %>% pull(percent) %>% round(1)`%), and a plurality of parcels by area (`r areaR1 %>% filter(R1 == TRUE) %>% pull(percent) %>% round(1)`%) and value (`r valueR1 %>% filter(R1 == TRUE) %>% pull(percent) %>% round(1)`%), are currently and remaining the lowest density residential zoning.
+
+The Sankey diagrams show that the majority of residential parcels that are changing zoning are moving from R-1 to MDR, which is a positive change that will allow for more residential construction and density.
+
 ### Downzoning
 
+However!
 
+There are 488 parcels that are inexplicably being downzoned from R-2 (analogous to MDR) to LDR. This will create more noncompliant parcels and limit the amount of housing that can be built or added in those areas.
+
+
+
+```{r}
+
+
+```
 
 ### Non-compliance
+
+```{r nonconforming}
+
+library(leaflet)
+
+LDRclasses <- c("1 Family Residential", "Residential, Vacant Land", "Inn/lodge", "Det row bldg", "Aged - home")
+MDRclasses <- c(LDRclasses, "2 Family Residential", "3 Family Residential", "Multiple Residential")
+
+conformings <- parcelsJoin %>%
+  mutate(
+    Conforming = case_when(
+      Zoning_2026 == "LDR" & CLASSDSCRP %in% LDRclasses ~ TRUE,
+      Zoning_2026 == "LDR" & ! CLASSDSCRP %in% LDRclasses ~ FALSE,
+      Zoning_2026 == "MDR" & CLASSDSCRP %in% MDRclasses ~ TRUE,
+      Zoning_2026 == "MDR" & ! CLASSDSCRP %in% MDRclasses ~ FALSE,
+      TRUE ~ NA
+    ),
+    ConformingCurrent = case_when(
+      CATEGORY == "R-1 Low Density Residential" & CLASSDSCRP %in% LDRclasses ~ TRUE,
+      CATEGORY == "R-1 Low Density Residential" & ! CLASSDSCRP %in% LDRclasses ~ FALSE,
+    )
+  )
+
+nonconformingLDR <- conformings %>%
+  filter(! Conforming) %>%
+  filter(Zoning_2026 == "LDR") %>%
+  mutate(
+    popup = paste0(
+      SITEADDRESS, "<br>",
+      "Nonconforming because:", "<br>",
+      CLASSDSCRP, " in ", Zoning_2026
+    )
+  )
+
+nonconformingMap <- leaflet(nonconformingLDR %>% st_transform(4326)) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addPolygons(
+    data = zap_2026 %>% filter(Zoning_2026 == "LDR") %>% st_transform(4326),
+    weight = .1, opacity = .1, color = "Grey"
+  ) %>%
+  addPolygons(
+    weight = .2, 
+    fill = TRUE,
+    popup = ~popup
+  ) %>%
+  addLegend(
+    title = "Non conforming uses in LDR",
+    "topright",
+    colors = c("Grey", "Blue"), labels = c("LDR zones", "Non conforming parcels")
+  )
+
+nonconformingMap
+
+```
+
 
 
 ### Data & Reproducibility
