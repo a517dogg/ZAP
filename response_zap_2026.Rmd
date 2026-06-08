@@ -17,7 +17,7 @@ The city has a good open data portal, which I pull the current zoning file from.
 
 ```{r setup, include=FALSE}
 
-options(cache = TRUE)
+options(cache = TRUE, echo = FALSE, warning = FALSE, message = FALSE)
 
 library(tidyverse)
 library(sf)
