@@ -22,6 +22,7 @@ options(cache = TRUE)
 library(tidyverse)
 library(sf)
 library(plotly)
+library(leaflet)
 
 ```
 
@@ -213,19 +214,19 @@ valueR1 = flowvals %>%
 
 ```
 
-### Changes by count
+#### Changes by count
 
 ```{r countsSankeyPlot, echo = FALSE}
 countSankey
 ```
 
-### Changes by area
+#### Changes by area
 
 ```{r areaSankeyPlot, echo = FALSE}
 areaSankey
 ```
 
-### Changes by value
+#### Changes by value
 
 ```{r valueSankeyPlot, echo = FALSE}
 valueSankey
@@ -247,6 +248,47 @@ There are 488 parcels that are inexplicably being downzoned from R-2 (analogous 
 
 ```{r}
 
+downzoned <- parcelsJoin %>%
+  filter(
+    (Zoning_2026 == "LDR" & CATEGORY != "R-1 Low Density Residential") |
+      (Zoning_2026 == "MDR" & CATEGORY != "R-1 Low Density Residential" & CATEGORY != "R-2 Medium Density Residential" & CATEGORY != "URD Urban Renewal District")
+  ) %>%
+  mutate(
+    NewlyNonConforming = case_when(
+      (Zoning_2026 == "LDR" & CLASSDSCRP %in% c("1 Family Res", "Res vac land", "Inn/lodge", "Det row bldg")) ~ FALSE,
+      (Zoning_2026 == "MDR" & CLASSDSCRP %in% c("Apartment", "Animal welfr")) ~ TRUE,
+      Zoning_2026 == "MDR" ~ FALSE,
+      TRUE ~ TRUE
+    ),
+    popup = paste(
+      SITEADDRESS, "<br>",
+      "Current: ", CATEGORY, "<br>",
+      "ZAP: ", Zoning_2026, "<br>",
+      ifelse(NewlyNonConforming, "Newly nonconforming", "Still conforms")
+    ),
+    fill = case_when(
+      Zoning_2026 == "LDR" ~ "Blue",
+      Zoning_2026 == "MDR" ~ "Orange"
+    ),
+    weight = case_when(
+      NewlyNonConforming == TRUE ~ .5,
+      NewlyNonConforming == FALSE ~ .1
+    )
+  )
+
+downzoneMap <- leaflet(downzoned %>% st_transform(4326)) %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(
+    popup = ~popup, 
+    weight = ~weight,
+    color = ~fill, fill = TRUE) %>%
+  addLegend(
+    "topright",
+    title = "Areas downzoned by ZAP",
+    colors = c("Orange", "Blue"), labels = c("Downzoned to MDR", "Downzoned to LDR")
+  )
+
+downzoneMap
 
 ```
 
@@ -254,9 +296,13 @@ There are 488 parcels that are inexplicably being downzoned from R-2 (analogous 
 
 ```{r nonconforming}
 
-library(leaflet)
+R1_parcels = parcels_2022 %>% 
+  st_drop_geometry() %>%
+  filter(BISZONING == "R-1") %>%
+  count(CLASSDSCRP) %>%
+  mutate(percent = 100 * n / sum(n))
 
-LDRclasses <- c("1 Family Residential", "Residential, Vacant Land", "Inn/lodge", "Det row bldg", "Aged - home")
+LDRclasses <- c("1 Family Residential", "Residential, Vacant Land", "Det row bldg", "Aged - home")
 MDRclasses <- c(LDRclasses, "2 Family Residential", "3 Family Residential", "Multiple Residential")
 
 conformings <- parcelsJoin %>%
@@ -306,21 +352,31 @@ nonconformingMap
 
 ```
 
-The above map shows LDR zones in the proposed 2026 ZAP plan, and highlights parcels that are non-conforming. I label a parcel as non-conforming in LDR if it is something other than a single family house, residential vacant land, an inn/lodge, a detached row building, or an aged home. This is an undercount because it only shows parcels that are non-conforming because of their land use class, but there are also parcels that are non-conforming because of size, setbacks, etc.
+The above map shows LDR zones in the proposed 2026 ZAP plan, and highlights parcels that are non-conforming based on the parcel description. I label a parcel as non-conforming in LDR if it is something other than a single family house, residential vacant land, an aged home, or a detached row building (likely a townhouse which is allowed in LDR, a very welcome change from the 2023 proposal). This is an undercount because it only shows parcels that are non-conforming because of their land use class, but there are also parcels that are non-conforming because of size, setbacks, etc.
 
 Why does it matter if a parcel is non-conforming? If an apartment building in an LDR zone is damaged by weather or fire, it cannot be rebuilt as an apartment building. Those homes will be lost and the residing families will be displaced.
 
-What's the cause of most of the non-conforming parcels in the above map?
+What's the cause of most of the non-conforming labels in the above map?
 
 ```{r nonconformingCases}
 
-conformings %>% 
-  filter(Zoning_2026 == "LDR") %>% 
+nonconformingLDR %>%
   st_drop_geometry() %>% 
-  count(Conforming, ConformingCurrent) %>%
-  pivot_wider(names_from = Conforming, values_from = n) 
+  group_by(CLASSDSCRP) %>%
+  count() %>%
+  mutate(Description = case_when(
+    n > 50 ~ CLASSDSCRP, TRUE ~ "Other")
+  ) %>%
+  group_by(Description) %>%
+  summarize(count = sum(n)) %>%
+  mutate(percent = 100 * count / sum(count)) %>%
+  arrange(desc(count))
 
 ```
+
+The vast majority of non-conforming parcels in LDR are duplexes. Over 14% of all parcels in LDR are duplexes. Duplexes should be allowed in LDR.
+
+Appartments are only 265 of the nonconforming parcels, but those 265 parcels contain (according to 2022 parcel data) `r nonconformingLDR %>% filter(CLASSDSCRP == "Apartment") %>% pull(NORESUNITS) %>% sum()` residential units. When we plot them on a map, it's clear that apartments in LDR are clustered: in the southeast, in Swillburg, Upper Monroe and Park Ave, and in the northwest between Dewey and Lake, north of Driving Park. These areas should probably be rezoned to MDR. The possibility of those neighborhoods losing housing due to normal attrition and aging of apartment buildings should concern the city as well as businesses in those neighborhoods who would be losing customers.
 
 ### Data & Reproducibility
 
