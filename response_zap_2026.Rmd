@@ -1,23 +1,29 @@
+---
 output:
     html_document:
-        toc: true
+        toc: false
         theme: cosmo
 author: Adrian Martin, Rochester NY
+---
 
 ## ZAP Feedback
 
 I am writing this page as feedback to the Rochester City Planning Commission on the Zoning Alignment Project release of 2026. Feedback for the [June 10th meeting](https://rochesterzap.com/2026/05/13/city-planning-commission-and-rochester-environmental-commission-meeting-dates-announced/) is due June 9th, 4PM. This will be emailed to the commission, but also posted on github for public access and reproducibility.
 
 My feedback looks at a few areas that I am concerned about:
+
 - Downzoning specific neighborhoods
 - Large numbers of parcels remaining non-compliant with zoning that does not reflect the current or desired (as per the Roc2034 comprehensive plan) character of that neighborhood
 
-In addition to feedback on the ZAP plan, I also want to stress that I banged this analysis out in a few days because the city refused to proactively post the ZAP zoning file and required me to FOIL it (FOIL 2026-2176 filed Apr 20 2026). They then granted themselves an extension on that FOIL request (May 18 2026), despite the request requiring zero redaction or processing. I finally received the data on June 1st, 2026. This mirrored the process for releasing the 2023 ZAP zoning file (FOIL 2023-6693, filed Oct 29 2023, released Jan 26 2024, comment deadline was Jan 31 2024).
-The city has a good open data portal, which I pull the current zoning file from. The city refused to provide any draft zoning file unless I filed a FOIL, and they declined to explain the reasoning behind their refusal. I know of no reason to prevent the city from proactively postoing the ZAP file to the open data portal back in April, when they released their plans. This whole process was extremely frustrating.
+ZAP is 345 pages and nobody can comment on all of it. There's plenty of non-geographic feedback to be offered as well. Previous feedback I offered in 2023 still stands - I'm in favor of relaxing restrictions against ADUs, I oppose parking mandates, I think transit corridors should be upzoned with a wider buffer than the single-parcel buffer used by the city. I'm focusing my feedback on geographic information because most other feedback I've seen posted publicly does not go into it (since the GIS file was unavailable until last week).
+
+In addition to feedback on the ZAP plan, I also want to stress that I banged this analysis out in a few days because the city refused to proactively post the ZAP zoning file and required me to FOIL it (FOIL 2026-2176 filed Apr 20 2026). They then granted themselves an extension on that FOIL request (May 18 2026), despite the request requiring zero redaction or processing. I finally received the data on June 1st, 2026. This mirrored the process for releasing the 2023 ZAP zoning file (FOIL 2023-6693, filed Oct 29 2023, released Jan 26 2024, comment deadline was Jan 31 2024). The 2023 and 2026 files were not consistent: 2023 contained overlay districts and 2026 did not.
+
+The city has a good open data portal, which I pull the current zoning file from. The city refused to provide any draft zoning file unless I filed a FOIL, and they declined to explain the reasoning behind their refusal. I know of no reason to prevent the city from proactively postoing the ZAP file to the open data portal back in April, when they released their plans. A public release would also likely enforce consistently between the files. This whole process was extremely frustrating.
 
 ```{r setup, include=FALSE}
 
-options(cache = TRUE, echo = FALSE, warning = FALSE, message = FALSE)
+knitr::opts_chunk$set(cache = TRUE, echo = FALSE, warning = FALSE, message = FALSE)
 
 library(tidyverse)
 library(sf)
@@ -34,18 +40,28 @@ library(leaflet)
 
 current_zoning <- read_sf("https://maps.cityofrochester.gov/server/rest/services/Open_Data/Zoning_Districts_Open_Data/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson") %>%
     rename(Zoning_current = LABEL) %>%
+    # no preservation or overlay districts
     st_transform(6541)
 
-parcels_2022 <- read_sf("https://maps.cityofrochester.gov/server2/rest/services/Open_Data/TaxParcel2022/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson") %>% 
-    st_transform(6541)
+# parcels_2022 <- read_sf("https://maps.cityofrochester.gov/server2/rest/services/Open_Data/TaxParcel2022/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson") %>% 
+#     st_transform(6541)
+# API down June 8, downloaded from data.cityofrochester.gov
+parcels_2022 <- read_sf("TaxParcel2022.geojson") %>% st_transform(6541)
 
 zap_2023 <- read_sf("DRAFT_ZAP_Districts_Sept2023/DRAFT_ZAP_DISTRICTS_Sept2023.shp") %>%
     rename(Zoning_2023 = NAME) %>%
+    filter( ! grepl(x = Purpose, pattern = "overlay") ) %>% 
     st_transform(6541)
 
 zap_2026 <- read_sf("ZAP_Districts_final_draft_Apr26.shp") %>%
     rename(Zoning_2026 = NAME) %>%
+    # no overlays/preservation districts in this FOIL release
     st_transform(6541)
+
+# test = parcels_2022 %>% filter(SITEADDRESS == "1399 East Ave") %>%
+#   select(BISZONING, SITEADDRESS) %>%
+#   st_join(zap_2023) # overlay zones overlap with residential zones
+#   # filter them out above
 
 # for plotting
 ZAPwgs <- zap_2026 %>% st_transform(4326) %>%
@@ -79,15 +95,21 @@ ZAPareas <- zap_2026 %>%
   mutate(acres = units::set_units(totalarea, "acres")) %>%
   arrange(desc(totalarea))
 
-parcelsJoin <- parcels_2022 %>% 
-  mutate(parcelArea = st_area(.)) %>%
-  st_join(zap_2026, st_overlaps, largest = TRUE) %>%
-  #st_join(st_make_valid(ZAPwgs), st_overlaps) %>%
-  st_join(current_zoning, st_overlaps, largest = TRUE)
+# parcelsJoin <- parcels_2022 %>% 
+#   mutate(parcelArea = st_area(.)) %>%
+#   st_join(zap_2026, st_overlaps, largest = TRUE) %>%
+#   #st_join(st_make_valid(ZAPwgs), st_overlaps) %>%
+#   st_join(current_zoning, st_overlaps, largest = TRUE) %>%
+#   st_join(zap_2023, st_overlaps, largest = TRUE)
+
+#   # above takes forever; let's just run it once and reload it.
+
+# saveRDS(parcelsJoin, "parcelsJoin.RDS")
+parcelsJoin <- readRDS("parcelsJoin.RDS")
 
 parcelsSummed <- parcelsJoin %>% 
-  group_by(CATEGORY, Zoning_2026) %>% 
   st_drop_geometry() %>%
+  group_by(CATEGORY, Zoning_2026) %>% 
   summarize(
     parcelCount = n(), 
     parcelArea = sum(parcelArea),
@@ -212,6 +234,18 @@ valueR1 = flowvals %>%
   summarize(value = sum(parcelValue)) %>%
   mutate(percent = 100 * value / sum(value))
 
+overall_area =  flowvals %>% 
+  group_by(Zoning_2026) %>% 
+  summarize(area = sum(parcelArea)) %>% 
+  arrange(desc(area)) %>% 
+  mutate(percent = 100 * area / sum(area))
+
+old_area = flowvals %>% 
+  group_by(CATEGORY) %>% 
+  summarize(area = sum(parcelArea)) %>% 
+  arrange(desc(area)) %>% 
+  mutate(percent = 100 * area / sum(area))
+
 ```
 
 #### Changes by count
@@ -232,19 +266,21 @@ areaSankey
 valueSankey
 ```
 
-## Changes in total analysis
+## {-}
 
-The above sankey plots shows the flow of parcels by count (the first) and by area (the second) from current zoning to the 2026 ZAP proposal. The majority of current parcels by count (`r countR1 %>% filter(R1 == TRUE) %>% pull(percent) %>% round(1)`%), and a plurality of parcels by area (`r areaR1 %>% filter(R1 == TRUE) %>% pull(percent) %>% round(1)`%) and value (`r valueR1 %>% filter(R1 == TRUE) %>% pull(percent) %>% round(1)`%), are currently and remaining the lowest density residential zoning.
+The above sankey plots show the flow of parcels by count (the first), by area (the second), and by asssessed value (the third) from current zoning to the 2026 ZAP proposal. The majority of current parcels by count (`r countR1 %>% filter(R1 == TRUE) %>% pull(percent) %>% round(1)`%), and a plurality of parcels by area (`r areaR1 %>% filter(R1 == TRUE) %>% pull(percent) %>% round(1)`%) and value (`r valueR1 %>% filter(R1 == TRUE) %>% pull(percent) %>% round(1)`%), are currently and remaining the lowest density residential zoning.
 
-The Sankey diagrams show that the majority of residential parcels that are changing zoning are moving from R-1 to MDR, which is a positive change that will allow for more residential construction and density.
+Overall, the 2026 ZAP proposal maintains low-density residential zoning as the predominant zoning classification of the city, with 30.3% of land zoned LDR (down from 38.7% in current zoning). Open Space is second, with 18% (up from 17.5%), followed by Industrial at 16.8% (down from 18.5%) and MDR at 11.2% (up from 5.4%).  These areas are calculated by summing the areas of parcels grouped by their zoning and in general is a good step in a positive direction - allowing more housing in the city.
+
+The Sankey diagrams show that the majority of residential parcels that are changing zoning are moving from R-1 to MDR, which is a positive change that will allow for more residential construction, density, affordability, sustainability, etc.; and is also in agreement with our Roc2034 plan. Hooray!
 
 ### Downzoning
 
 However!
 
-There are 488 parcels that are inexplicably being downzoned from R-2 (analogous to MDR) to LDR. This will create more noncompliant parcels and limit the amount of housing that can be built or added in those areas.
+There are 488 parcels that are being downzoned from R-2 (analogous to MDR) to LDR. This will create more noncompliant parcels and limit the amount of housing that can be built or added in those areas.
 
-
+I'm not going to spend a ton of time on this; the downzoned areas mimic the Roc2034 placemaking plan, so this is a battle that was already lost ^[except when it comes to complaining about upzoning, for example the Chili Avenue transit cooridor from Warwick Ave to Woodbine, which is remaining LDR due to political pressure, as seen on page 42 of the [responses to 2023 ZAP feedback](https://rochesterzap.com/wp-content/uploads/2026/05/FGEIS-Comment-Response-Summary-Table.pdf), despite the [Roc2034 placemaking map](https://maps.cityofrochester.gov/portal/apps/webappviewer/index.html?id=9d092b2db37f43b8aedf52c4948bd379) showing that area as the MDR analogue]. However, given that these areas are going to be downzoned, the city should at least minimize the amount of newly non-conforming parcels by allowing more land use classes (duplexes) to be allowable by right in LDR.
 
 ```{r}
 
@@ -352,9 +388,13 @@ nonconformingMap
 
 ```
 
-The above map shows LDR zones in the proposed 2026 ZAP plan, and highlights parcels that are non-conforming based on the parcel description. I label a parcel as non-conforming in LDR if it is something other than a single family house, residential vacant land, an aged home, or a detached row building (likely a townhouse which is allowed in LDR, a very welcome change from the 2023 proposal). This is an undercount because it only shows parcels that are non-conforming because of their land use class, but there are also parcels that are non-conforming because of size, setbacks, etc.
+The above map shows LDR zones in the proposed 2026 ZAP plan, and highlights parcels that are non-conforming based on the parcel description. I label a parcel as non-conforming in LDR if it is something other than a single family house, residential vacant land, an aged home, or a detached row building (likely a townhouse which is allowed in LDR, a very welcome change from the 2023 proposal). This is an *undercount* because it only shows parcels that are non-conforming because of their land use class, but there are also parcels that are non-conforming because of size, setbacks, etc. Had I more time with the shapefile, I could have forced city staffers to read even more analysis that grouped parcels by street segment, calculated average lot frontages per block, and estimated non-conforming parcels by building and parcel dimension.
 
-Why does it matter if a parcel is non-conforming? If an apartment building in an LDR zone is damaged by weather or fire, it cannot be rebuilt as an apartment building. Those homes will be lost and the residing families will be displaced.
+Why does it matter if a parcel is non-conforming? If an apartment building in an LDR zone is damaged by weather or fire, it cannot be rebuilt as an apartment buildingl those homes will be lost and the residing families will be displaced. If a family lives in one of the 5,364 duplexes in an LDR zone, they're legally prohibited from building an addition (or ADU) since it would be classified as an increase in intensity.
+
+The abandonment/discontinuance (Article 22.2 E) language is especially important. If one of the 5,364 duplexes in an LDR is vacant for over a year in an LDR, it is no longer allowed to exist as a duplex. There are plenty of valid reasons a duplex might be vacant for a year - owner illness, travel, maintenance problems, etc. To then make that building legally uninhabitable without further significant investment to convert it to a single family is seriously short-sighted. As an example: an owner cannot rent a duplex because it needs roof repair, the owner needs time to get the money to repair the roof, the roof repair itself takes time, and then renting out the units takes time. If that total process exceeds a year, should the owner be forced to keep the duplex vacant while they scrounge up more money to deconvert the duplex into a single family? Who does that help?
+
+One of the stated purposes of this zoning code is to gradually eliminate non-conforming uses and reuse or eliminate non-conforming structures. That would eliminate the homes of over five thousand Rochester families!
 
 What's the cause of most of the non-conforming labels in the above map?
 
@@ -370,13 +410,45 @@ nonconformingLDR %>%
   group_by(Description) %>%
   summarize(count = sum(n)) %>%
   mutate(percent = 100 * count / sum(count)) %>%
-  arrange(desc(count))
+  arrange(desc(count)) %>%
+  knitr::kable()
 
 ```
 
-The vast majority of non-conforming parcels in LDR are duplexes. Over 14% of all parcels in LDR are duplexes. Duplexes should be allowed in LDR.
+The vast majority (over 80%) of non-conforming parcels in LDR are duplexes. Over 14% of all parcels in LDR are duplexes. Duplexes should be allowed in LDR.
 
-Appartments are only 265 of the nonconforming parcels, but those 265 parcels contain (according to 2022 parcel data) `r nonconformingLDR %>% filter(CLASSDSCRP == "Apartment") %>% pull(NORESUNITS) %>% sum()` residential units. When we plot them on a map, it's clear that apartments in LDR are clustered: in the southeast, in Swillburg, Upper Monroe and Park Ave, and in the northwest between Dewey and Lake, north of Driving Park. These areas should probably be rezoned to MDR. The possibility of those neighborhoods losing housing due to normal attrition and aging of apartment buildings should concern the city as well as businesses in those neighborhoods who would be losing customers.
+Appartments are only 265 of the nonconforming parcels, but those 265 parcels contain (according to 2022 parcel data) `r nonconformingLDR %>% filter(CLASSDSCRP == "Apartment") %>% pull(NORESUNITS) %>% sum()` residential units. When we plot them on a map, it's clear that apartments in LDR are clustered: in the southeast, in Swillburg, Upper Monroe and Park Ave, and in the northwest between Dewey and Lake, north of Driving Park. These areas should probably be rezoned to MDR or one of the neighborhood center classifications, however that opportunity was apparently lost with the Roc2034 adoption. The possibility of those neighborhoods losing housing due to normal attrition and aging of apartment buildings should concern the city as well as businesses in those neighborhoods, who would be losing customers. The city [acknowledges in responses to ZAP comments](https://rochesterzap.com/wp-content/uploads/2026/05/FGEIS-Comment-Response-Summary-Table.pdf) that the density in Park Ave contributes to the success of businesses in the area.^["More tall buildings with residents offers more customers for local businesses. The few tall apartment buildings along Park Ave contribute to the success of businesses along that corridor." page 16] An easy way to address this is to allow duplexes in LDR, which would allow LDR to be more flexible to responses in residential demand.
+
+### Changes from 2023 to 2026
+
+```{r changes2023to2026}
+
+changes_from_draft <- parcelsJoin %>%
+  filter(Zoning_2026 != Zoning_2023) %>%
+  select(SITEADDRESS, BISZONING, Zoning_2023, Zoning_2026) %>%
+  mutate(
+    popup = paste0(
+      SITEADDRESS, " is ", BISZONING, "<br>",
+      "2023: ", Zoning_2023, "<br>",
+      "2026: ", Zoning_2026
+      )
+    ) %>%
+  st_transform(4326)
+
+leaflet(changes_from_draft) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addPolygons(weight = .2, opacity = .2, color = "Red", popup = ~popup)
+
+
+```
+
+I want to highlight some small changes from the 2023 to 2026 maps. Portions of Chili Ave were proposed to be upzoned in 2023 in concordance with the Roc2034 Placemaking plan, however the 2026 proposal deviates from Roc2034 in response to political pressure from homeowners.^[Kudos to the city for releasing public comments and their response; without that release, we could only speculate to the reason behind these change.] 1183 Monroe Ave (Hillside) was also proposed to be upzoned to HDR, aligning with Roc2034, but the final draft proposes MDR instead. Seyle Terrace in Maplewood was proposed to be MDR, but the boundary between MDR and LDR was shifted south, and Seyle Terrace stays LDR. Individual parcels on Park Ave get dropped down to LDR from NMU or MDR. I see these as regretable compromises to specific political pressures that will help get the entire ZAP passed.^[There is a positive change though: the west end of Merrimac St is changed from MDR to HDR.] I urge the city not to make any more compromises away from the Roc2034 vision.
+
+## Conclusion
+
+I recognize that this document is a list of complaints. My prior feedback on the 2023 ZAP was also a list of complaints. I want to stress that both the 2023 and current ZAP proposals are a clear improvement over the status quo, and clearly represent an enormous amount of work, a continuation of the Roc2034 process. A decent number of residential parcels are upzoned into MDR; accessory dwelling units will be easier to build; parking requirements have been eased; the requirement to hire consultants to write a Transportation Access Plan in order to start a business has been scrapped. Many of the positive changes are half-steps, but reviewing the comments to the 2023 ZAP proposal, it's clear that while many city residents are pushing towards greater density, walkability, affordability and inclusion, there are still many city residents who are distrustful of those goals. I understand that ZAP has to accomodate those concerns as well.
+
+Thank you to the city NBD staff for their work on this years-long project.
 
 ### Data & Reproducibility
 
