@@ -1,9 +1,10 @@
 ---
+title: ZAP (2026) Feedback
 output:
     html_document:
-        toc: false
+        
         theme: cosmo
-author: Adrian Martin, Rochester NY
+author: "Adrian Martin, Rochester NY"
 ---
 
 ## ZAP Feedback
