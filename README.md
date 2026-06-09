@@ -5,7 +5,8 @@ Files relating to the Zoning Alignment Project
   - GIS file of the proposed zoning (2026 final draft): https://github.com/a517dogg/ZAP/blob/main/Records_Request_Download_FOIL-2026-2176_2026-06-01--14-20-49.zip
   - GIS file of the proposed zoning (2023 draft): https://github.com/a517dogg/ZAP/blob/main/DRAFT_ZAP_Districts_Sept2023.zip
 - Analysis of 2026 proposed zoning:
-  - to come
+  - [Here](https://a517dogg.github.io/ZAP/index.html).
+  - This updates most of the below maps/visuals. Everything is on one page to make it easier to submit as a comment.
 - Analysis of 2023 draft zoning:
   - Maps
     - Map of (some of the) non-conforming parcels in Low Density Residential in the proposed ZAP zoning: [https://a517dogg.github.io/ZAP/nonconformingMap.html](https://a517dogg.github.io/ZAP/nonconformingMap.html)
