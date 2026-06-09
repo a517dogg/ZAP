@@ -446,7 +446,12 @@ I want to highlight some small changes from the 2023 to 2026 maps. Portions of C
 
 ## Conclusion
 
-I recognize that this document is a list of complaints. My prior feedback on the 2023 ZAP was also a list of complaints. I want to stress that both the 2023 and current ZAP proposals are a clear improvement over the status quo, and clearly represent an enormous amount of work, a continuation of the Roc2034 process. A decent number of residential parcels are upzoned into MDR; accessory dwelling units will be easier to build; parking requirements have been eased; the requirement to hire consultants to write a Transportation Access Plan in order to start a business has been scrapped. Many of the positive changes are half-steps, but reviewing the comments to the 2023 ZAP proposal, it's clear that while many city residents are pushing towards greater density, walkability, affordability and inclusion, there are still many city residents who are distrustful of those goals. I understand that ZAP has to accomodate those concerns as well.
+ - Please allow duplexes in LDR.
+ - Please don't make any additional compromises to NIMBYs by moving more parcels/blocks to LDR
+ - Please release GIS files on the city open data portal as routine
+ - Thank you to NBD staff.
+
+I recognize that this document is a list of complaints. My prior feedback on the 2023 ZAP was also a list of complaints. I want to stress that both the 2023 and current ZAP proposals are a clear improvement over the status quo, and clearly represent an enormous amount of work, a continuation of the Roc2034 process. A decent number of residential parcels are upzoned into MDR; accessory dwelling units will be easier to build; parking requirements have been eased; the requirement to hire consultants to write a Transportation Access Plan in order to start a business has been scrapped. Many of the positive changes are half-steps; from reviewing the comments to the 2023 ZAP proposal, it's clear that while many city residents are pushing towards greater density, walkability, affordability and inclusion, there are still many city residents who are distrustful of those goals. I understand that ZAP has to accomodate those concerns as well.
 
 Thank you to the city NBD staff for their work on this years-long project.
 
@@ -456,4 +461,4 @@ All data used in this analysis is available either via the city's open data port
 
 2026 ZAP zoning file released via FOIL: [download here](https://rochesterny.justfoia.com/Attachments/Download/d1d0f25a-662a-4745-963e-d2fe7797b560)
 
-2023 ZAP zoning file also released via FOIL: [download here]()
+2023 ZAP zoning file also released via FOIL: [download here](https://github.com/a517dogg/ZAP/blob/main/DRAFT_ZAP_Districts_Sept2023.zip)
