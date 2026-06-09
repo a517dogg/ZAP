@@ -458,7 +458,7 @@ Thank you to the city NBD staff for their work on this years-long project.
 
 ### Data & Reproducibility
 
-All data used in this analysis is available either via the city's open data portal or the city's FOIL website. All tools in this analysis are open source. All code is posted to github. Anyone is free to reproduce and hopefully improve this analysis.
+All data used in this analysis is available either via the city's open data portal or the city's FOIL website. All tools in this analysis are open source. All code is posted to [github](https://github.com/a517dogg/ZAP). Anyone is free to reproduce and hopefully improve this analysis.
 
 2026 ZAP zoning file released via FOIL: [download here](https://rochesterny.justfoia.com/Attachments/Download/d1d0f25a-662a-4745-963e-d2fe7797b560)
 
