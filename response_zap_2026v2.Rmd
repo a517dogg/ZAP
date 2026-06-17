@@ -61,11 +61,28 @@ ZAPwgs <- zap_2026 %>% st_transform(4326) %>%
   # don't plot the airport overlay
   filter(Zoning_2026 != "O-A")
 
-footprints <- "https://maps.cityofrochester.gov/server/rest/services/Open_Data/Building_Footprint_Open_Data/FeatureServer/0/query?outFields=*&where=1%3D1" %>%
-  get_spatial_layer() %>%
-  st_transform(6541)
+# footprints <- "https://maps.cityofrochester.gov/server/rest/services/Open_Data/Building_Footprint_Open_Data/FeatureServer/0" %>%
+#   get_spatial_layer() %>%
+#   st_transform(6541)
+# above not working. just downloading instead.
+
+footprints_all <- read_sf('data/Building_Footprints%3A_Live.geojson')
+footprints <- footprints_all %>%
+  # filter out the demolished structures
+  filter(DEMOLISHED_TF == "Existing") %>%
+  # no parcel ID; need to to a spatial join
+  st_transform(6541) %>%
+  st_join(parcels_2022 %>% select(PARCELID, SITEADDRESS), st_within)
+
+# # check
+# parcels_2022 %>% filter(grepl(x = SITEADDRESS, pattern = "170 Barrington")) %>% st_geometry() %>% plot()
+# footprints %>% filter(grepl(x = SITEADDRESS, pattern = "170 Barrington")) %>%
+#   st_geometry() %>% plot(add = TRUE)
+footprints_zoning <- footprint_all %>% 
 
 ```
+
+
 
 ```{r analysis}
 
