@@ -21,7 +21,8 @@ library(tidyverse)
 library(sf)
 library(plotly)
 library(leaflet)
-library(arcpullr)
+# library(arcpullr)
+library(units)
 
 ```
 
@@ -78,7 +79,6 @@ footprints <- footprints_all %>%
 # parcels_2022 %>% filter(grepl(x = SITEADDRESS, pattern = "170 Barrington")) %>% st_geometry() %>% plot()
 # footprints %>% filter(grepl(x = SITEADDRESS, pattern = "170 Barrington")) %>%
 #   st_geometry() %>% plot(add = TRUE)
-footprints_zoning <- footprint_all %>% 
 
 ```
 
@@ -120,6 +120,19 @@ ZAPareas <- zap_2026 %>%
 
 # saveRDS(parcelsJoin, "parcelsJoin.RDS")
 parcelsJoin <- readRDS("parcelsJoin.RDS")
+
+footprintsJoin <- footprints %>%
+  select(OBJECTID, GEOMETRYSOURCE, BUILDINGCLASS, PARCELID, SITEADDRESS) %>%
+  # sample_n(100) %>%
+  left_join(
+    parcelsJoin %>% 
+      as_data_frame() %>%
+      select(PARCELID, Zoning_current, Zoning_2026, parcelgeo = geometry),
+    by = "PARCELID"
+  ) %>%
+  mutate(
+    lotCoveragePercent = 100 * st_area(geometry) / st_area(parcelgeo)
+  )
 
 parcelsSummed <- parcelsJoin %>% 
   st_drop_geometry() %>%
