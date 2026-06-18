@@ -73,12 +73,66 @@ footprints <- footprints_all %>%
   filter(DEMOLISHED_TF == "Existing") %>%
   # no parcel ID; need to to a spatial join
   st_transform(6541) %>%
-  st_join(parcels_2022 %>% select(PARCELID, SITEADDRESS), st_within)
+  # st_within doesn't work because of slight inaccuracies
+  # e.g.:
+  # footprintsJoin %>% filter(OBJECTID == "98325") %>% st_geometry() %>% plot()
+  # arcels_2022 %>% filter(PARCELID == "12122000010550140000") %>% st_geometry() %>% plot(add = TRUE, col = "red")
+  # do a centroid in parcel join instead
+  mutate(centroid = st_centroid(geometry)) %>%
+  st_set_geometry("centroid") %>%
+  st_join(parcels_2022 %>% select(PARCELID, SITEADDRESS), st_within) %>%
+  st_set_geometry("geometry") # back to footprint
 
 # # check
 # parcels_2022 %>% filter(grepl(x = SITEADDRESS, pattern = "170 Barrington")) %>% st_geometry() %>% plot()
 # footprints %>% filter(grepl(x = SITEADDRESS, pattern = "170 Barrington")) %>%
 #   st_geometry() %>% plot(add = TRUE)
+
+# rules taken from page 58, and abbreviations on page 303
+# https://rochesterzap.com/wp-content/uploads/2026/04/Final-Draft-Zoning-Code-April-2026.pdf
+
+lot_coverage_rules <- tibble(
+  zone = c("LDR", "MDR", "MDR", "HDR", "HDR"),
+  use = list(
+    "any", 
+    c("SF-D", "SF-A", "2F"), c("3F", "4F", "TH", "MF", "NR"), 
+    c("SF-D", "SF-A", "2F"), c("3F", "4F", "TH", "MF", "NR")
+    ),
+  classdscrp = list(
+    "any",
+    c("1 Family Residential", "1 Family Residential", "2 Family Residential"),
+    # Difficult because townhouses have classdscrp of 1 family residential
+    # ex: 444 Harvard, 80 Edgerton, or N Plymouth townhouses
+    c("3 Family Residential", "4 Family Residential", "Townhouse", "Multiple Residential"),
+    c("1 Family Residential", "1 Family Residential", "2 Family Residential"),
+    c("3 Family Residential", "4 Family Residential", "Townhouse", "Multiple Residential")
+  ),
+  max_cov = c(50, 50, 55, 50, 55)
+)
+
+# will limit analysis to 1/2/3/4F and multiple.
+
+# find townhouses by st_touches?
+
+single_fams <- footprintsJoin %>% 
+  filter(PARCELID %in% (parcels_2022 %>% 
+    filter(CLASSDSCRP == "1 Family Residential") %>% pull(PARCELID)
+    )
+  )
+
+# below gets no results with st_touches
+# but takes forever to run with st_is_within_distance
+# skip it!
+touching <- st_is_within_distance(
+  single_fams, single_fams,
+  dist = 3,
+  sparse = TRUE, # don't cook laptop
+  remove_self = TRUE
+)
+
+# single_fams %>% 
+#   mutate(hasneighbor = map_lgl(touching, ~ length(.x) > 0)) %>%
+#   filter(hasneighbor)
 
 ```
 
@@ -122,17 +176,48 @@ ZAPareas <- zap_2026 %>%
 parcelsJoin <- readRDS("parcelsJoin.RDS")
 
 footprintsJoin <- footprints %>%
-  select(OBJECTID, GEOMETRYSOURCE, BUILDINGCLASS, PARCELID, SITEADDRESS) %>%
+  select(
+    OBJECTID, GEOMETRYSOURCE, BUILDINGCLASS, PARCELID, SITEADDRESS,
+    geometry, centroid) %>%
   # sample_n(100) %>%
   left_join(
     parcelsJoin %>% 
       as_data_frame() %>%
-      select(PARCELID, Zoning_current, Zoning_2026, parcelgeo = geometry),
+      select(PARCELID, CLASSDSCRP, Zoning_current, Zoning_2026, parcelgeo = geometry),
     by = "PARCELID"
   ) %>%
   mutate(
-    lotCoveragePercent = 100 * st_area(geometry) / st_area(parcelgeo)
-  )
+    lotCoveragePercent = as.numeric(100 * st_area(geometry) / st_area(parcelgeo))
+  ) %>% 
+  left_join(
+    lot_coverage_rules %>% unnest(cols = c(use)) %>% unnest(cols = c(classdscrp)), 
+    by = c("Zoning_2026" = "zone", "CLASSDSCRP" = "classdscrp")
+  ) %>%
+  mutate(
+    max_cov = ifelse(Zoning_2026 == "LDR", .5, max_cov))
+  
+
+# multiple footprints for some parcels (garages etc)
+
+<!-- footprints_by_parcel <- footprintsJoin %>%
+  group_by(PARCELID) %>%
+  summarize(
+    total_lot_cov = sum(lotCoveragePercent)
+  ) %>%
+  left_join(
+    footprintsJoin %>% 
+      st_drop_geometry() %>%
+      select(PARCELID, SITEADDRESS, CLASSDSCRP, Zoning_2026, max_cov),
+      by = "PARCELID"
+  ) %>%
+  # now to do the judgement on conforming or not
+  mutate(
+    conforming_cov = total_lot_cov < max_cov
+  ) -->
+
+# that takes a long time on my shitty computer
+# saveRDS(footprints_by_parcel, "footprints_by_parcel.RDS")
+footprints_by_parcel <- readRDS("footprints_by_parcel.RDS")
 
 parcelsSummed <- parcelsJoin %>% 
   st_drop_geometry() %>%
@@ -151,20 +236,7 @@ parcelsSummed <- parcelsJoin %>%
 ```
 
 
-
-Overall, the 2026 ZAP proposal maintains low-density residential zoning as the predominant zoning classification of the city, with 30.3% of land zoned LDR (down from 38.7% in current zoning). Open Space is second, with 18% (up from 17.5%), followed by Industrial at 16.8% (down from 18.5%) and MDR at 11.2% (up from 5.4%).  These areas are calculated by summing the areas of parcels grouped by their zoning and in general is a good step in a positive direction - allowing more housing in the city.
-
-The Sankey diagrams show that the majority of residential parcels that are changing zoning are moving from R-1 to MDR, which is a positive change that will allow for more residential construction, density, affordability, sustainability, etc.; and is also in agreement with our Roc2034 plan. Hooray!
-
-### Downzoning
-
-However!
-
-There are 488 parcels that are being downzoned from R-2 (analogous to MDR) to LDR. This will create more noncompliant parcels and limit the amount of housing that can be built or added in those areas.
-
-I'm not going to spend a ton of time on this; the downzoned areas mimic the Roc2034 placemaking plan, so this is a battle that was already lost ^[except when it comes to complaining about upzoning, for example the Chili Avenue transit cooridor from Warwick Ave to Woodbine, which is remaining LDR due to political pressure, as seen on page 42 of the [responses to 2023 ZAP feedback](https://rochesterzap.com/wp-content/uploads/2026/05/FGEIS-Comment-Response-Summary-Table.pdf), despite the [Roc2034 placemaking map](https://maps.cityofrochester.gov/portal/apps/webappviewer/index.html?id=9d092b2db37f43b8aedf52c4948bd379) showing that area as the MDR analogue]. However, given that these areas are going to be downzoned, the city should at least minimize the amount of newly non-conforming parcels by allowing more land use classes (duplexes) to be allowable by right in LDR.
-
-```{r}
+```{r, echo = FALSE}
 
 downzoned <- parcelsJoin %>%
   filter(
@@ -206,7 +278,7 @@ downzoneMap <- leaflet(downzoned %>% st_transform(4326)) %>%
     colors = c("Orange", "Blue"), labels = c("Downzoned to MDR", "Downzoned to LDR")
   )
 
-downzoneMap
+# downzoneMap
 
 ```
 
