@@ -1,5 +1,5 @@
 ---
-title: ZAP (2026) Feedback
+title: ZAP (2026) Feedback Sequel
 output:
     html_document:
         
@@ -11,7 +11,7 @@ author: "Adrian Martin, Rochester NY"
 
 I am writing this page as feedback to the Rochester City Planning Commission on the Zoning Alignment Project release of 2026. Feedback for the July 13th meeting is due June 18th, 4PM. This will be emailed to the commission, but also posted on github for public access and reproducibility. This is my second round of feedback on the 2026 draft; the first feedback is available [here](https://a517dogg.github.io/ZAP/index.html).
 
-This piece will look more at non-conformities, using both the class usage description as well as lot coverage to compare ZAP's stated goal of reducing nonconformities with its actual effect (as best as I can model).
+This piece will look more at non-conformities, using both the class usage description as well as lot coverage to compare ZAP's stated goal of reducing nonconformities with its actual effect (as best as I can model). TDLR: the city should relax lot coverage requirements in MDR zones.
 
 ```{r setup, include=FALSE}
 
@@ -40,7 +40,7 @@ current_zoning <- read_sf("https://maps.cityofrochester.gov/server/rest/services
 # parcels_2022 <- read_sf("https://maps.cityofrochester.gov/server2/rest/services/Open_Data/TaxParcel2022/FeatureServer/0/query?outFields=*&where=1%3D1&f=geojson") %>% 
 #     st_transform(6541)
 # API down June 8, downloaded from data.cityofrochester.gov
-parcels_2022 <- read_sf("TaxParcel2022.geojson") %>% st_transform(6541)
+parcels_2022 <- read_sf("data/TaxParcel2022.geojson") %>% st_transform(6541)
 
 zap_2023 <- read_sf("DRAFT_ZAP_Districts_Sept2023/DRAFT_ZAP_DISTRICTS_Sept2023.shp") %>%
     rename(Zoning_2023 = NAME) %>%
@@ -83,6 +83,16 @@ footprints <- footprints_all %>%
   st_join(parcels_2022 %>% select(PARCELID, SITEADDRESS), st_within) %>%
   st_set_geometry("geometry") # back to footprint
 
+# footprints_by_parcel <- footprints %>%
+#   group_by(PARCELID) %>%
+#   select(OBJECTID, PARCELID, geometry) %>%
+#   summarize()
+# note: some building footprints extend across parcels
+# thus st_area / st_area will result over 100%
+
+# saveRDS(footprints_by_parcel, "footprints_by_parcel.RDS")
+footprints_by_parcel <- readRDS("footprints_by_parcel.RDS")
+
 # # check
 # parcels_2022 %>% filter(grepl(x = SITEADDRESS, pattern = "170 Barrington")) %>% st_geometry() %>% plot()
 # footprints %>% filter(grepl(x = SITEADDRESS, pattern = "170 Barrington")) %>%
@@ -114,21 +124,21 @@ lot_coverage_rules <- tibble(
 
 # find townhouses by st_touches?
 
-single_fams <- footprintsJoin %>% 
-  filter(PARCELID %in% (parcels_2022 %>% 
-    filter(CLASSDSCRP == "1 Family Residential") %>% pull(PARCELID)
-    )
-  )
+# single_fams <- footprintsJoin %>% 
+#   filter(PARCELID %in% (parcels_2022 %>% 
+#     filter(CLASSDSCRP == "1 Family Residential") %>% pull(PARCELID)
+#     )
+#   )
 
 # below gets no results with st_touches
 # but takes forever to run with st_is_within_distance
 # skip it!
-touching <- st_is_within_distance(
-  single_fams, single_fams,
-  dist = 3,
-  sparse = TRUE, # don't cook laptop
-  remove_self = TRUE
-)
+# touching <- st_is_within_distance(
+#   single_fams, single_fams,
+#   dist = 3,
+#   sparse = TRUE, # don't cook laptop
+#   remove_self = TRUE
+# )
 
 # single_fams %>% 
 #   mutate(hasneighbor = map_lgl(touching, ~ length(.x) > 0)) %>%
@@ -175,11 +185,8 @@ ZAPareas <- zap_2026 %>%
 # saveRDS(parcelsJoin, "parcelsJoin.RDS")
 parcelsJoin <- readRDS("parcelsJoin.RDS")
 
-footprintsJoin <- footprints %>%
-  select(
-    OBJECTID, GEOMETRYSOURCE, BUILDINGCLASS, PARCELID, SITEADDRESS,
-    geometry, centroid) %>%
-  # sample_n(100) %>%
+footprintsJoin <- footprints_by_parcel %>%
+    # sample_n(100) %>%
   left_join(
     parcelsJoin %>% 
       as_data_frame() %>%
@@ -191,33 +198,15 @@ footprintsJoin <- footprints %>%
   ) %>% 
   left_join(
     lot_coverage_rules %>% unnest(cols = c(use)) %>% unnest(cols = c(classdscrp)), 
-    by = c("Zoning_2026" = "zone", "CLASSDSCRP" = "classdscrp")
+    by = c("Zoning_2026" = "zone", "CLASSDSCRP" = "classdscrp"),
+    multiple = "first"
   ) %>%
   mutate(
-    max_cov = ifelse(Zoning_2026 == "LDR", .5, max_cov))
-  
-
-# multiple footprints for some parcels (garages etc)
-
-<!-- footprints_by_parcel <- footprintsJoin %>%
-  group_by(PARCELID) %>%
-  summarize(
-    total_lot_cov = sum(lotCoveragePercent)
-  ) %>%
-  left_join(
-    footprintsJoin %>% 
-      st_drop_geometry() %>%
-      select(PARCELID, SITEADDRESS, CLASSDSCRP, Zoning_2026, max_cov),
-      by = "PARCELID"
-  ) %>%
-  # now to do the judgement on conforming or not
+    max_cov = ifelse(Zoning_2026 == "LDR", 50, max_cov)
+  ) %>% 
   mutate(
-    conforming_cov = total_lot_cov < max_cov
-  ) -->
-
-# that takes a long time on my shitty computer
-# saveRDS(footprints_by_parcel, "footprints_by_parcel.RDS")
-footprints_by_parcel <- readRDS("footprints_by_parcel.RDS")
+    conforming_cov = lotCoveragePercent <= max_cov
+  )
 
 parcelsSummed <- parcelsJoin %>% 
   st_drop_geometry() %>%
@@ -227,60 +216,8 @@ parcelsSummed <- parcelsJoin %>%
     parcelArea = sum(parcelArea),
     parcelValue = sum(CURRENT_TOTAL_VALUE, na.rm = TRUE)) # 59 parcels with NA value
 
-# footprint join
-
-# build logic for what parcels are allowed what lot coverage
-
-# check for lot coverage per parcel
-
 ```
 
-
-```{r, echo = FALSE}
-
-downzoned <- parcelsJoin %>%
-  filter(
-    (Zoning_2026 == "LDR" & CATEGORY != "R-1 Low Density Residential") |
-      (Zoning_2026 == "MDR" & CATEGORY != "R-1 Low Density Residential" & CATEGORY != "R-2 Medium Density Residential" & CATEGORY != "URD Urban Renewal District")
-  ) %>%
-  mutate(
-    NewlyNonConforming = case_when(
-      (Zoning_2026 == "LDR" & CLASSDSCRP %in% c("1 Family Res", "Res vac land", "Inn/lodge", "Det row bldg")) ~ FALSE,
-      (Zoning_2026 == "MDR" & CLASSDSCRP %in% c("Apartment", "Animal welfr")) ~ TRUE,
-      Zoning_2026 == "MDR" ~ FALSE,
-      TRUE ~ TRUE
-    ),
-    popup = paste(
-      SITEADDRESS, "<br>",
-      "Current: ", CATEGORY, "<br>",
-      "ZAP: ", Zoning_2026, "<br>",
-      ifelse(NewlyNonConforming, "Newly nonconforming", "Still conforms")
-    ),
-    fill = case_when(
-      Zoning_2026 == "LDR" ~ "Blue",
-      Zoning_2026 == "MDR" ~ "Orange"
-    ),
-    weight = case_when(
-      NewlyNonConforming == TRUE ~ .5,
-      NewlyNonConforming == FALSE ~ .1
-    )
-  )
-
-downzoneMap <- leaflet(downzoned %>% st_transform(4326)) %>% 
-  addProviderTiles(providers$CartoDB.Positron) %>% 
-  addPolygons(
-    popup = ~popup, 
-    weight = ~weight,
-    color = ~fill, fill = TRUE) %>%
-  addLegend(
-    "topright",
-    title = "Areas downzoned by ZAP",
-    colors = c("Orange", "Blue"), labels = c("Downzoned to MDR", "Downzoned to LDR")
-  )
-
-# downzoneMap
-
-```
 
 ### Non-compliance
 
@@ -296,36 +233,51 @@ LDRclasses <- c("1 Family Residential", "Residential, Vacant Land", "Det row bld
 MDRclasses <- c(LDRclasses, "2 Family Residential", "3 Family Residential", "Multiple Residential")
 
 conformings <- parcelsJoin %>%
+  left_join(
+    footprintsJoin %>% 
+      st_drop_geometry() %>%
+      select(PARCELID, lotCoveragePercent, max_cov, conforming_cov),
+    by = "PARCELID"
+    ) %>%
   mutate(
-    Conforming = case_when(
-      Zoning_2026 == "LDR" & CLASSDSCRP %in% LDRclasses ~ TRUE,
+    conforming_by_class = case_when(
       Zoning_2026 == "LDR" & ! CLASSDSCRP %in% LDRclasses ~ FALSE,
-      Zoning_2026 == "MDR" & CLASSDSCRP %in% MDRclasses ~ TRUE,
       Zoning_2026 == "MDR" & ! CLASSDSCRP %in% MDRclasses ~ FALSE,
+      Zoning_2026 == "LDR" & CLASSDSCRP %in% LDRclasses ~ TRUE,
+      Zoning_2026 == "MDR" & CLASSDSCRP %in% MDRclasses ~ TRUE,
       TRUE ~ NA
     ),
     ConformingCurrent = case_when(
       CATEGORY == "R-1 Low Density Residential" & CLASSDSCRP %in% LDRclasses ~ TRUE,
       CATEGORY == "R-1 Low Density Residential" & ! CLASSDSCRP %in% LDRclasses ~ FALSE,
+    ),
+    conforming_ZAP = case_when(
+      conforming_by_class == FALSE & conforming_cov == FALSE ~ "Fails both class and lot coverage",
+      conforming_by_class == TRUE & conforming_cov == FALSE ~ "Fails lot coverage",
+      conforming_by_class == FALSE & conforming_cov == TRUE ~ "Fails class",
+      conforming_by_class == TRUE & conforming_cov == TRUE ~ "Yes",
+      TRUE ~ "Unknown"
     )
   )
 
 nonconformingLDR <- conformings %>%
-  filter(! Conforming) %>%
-  filter(Zoning_2026 == "LDR") %>%
+  filter(! conforming_ZAP %in% c("Yes", "Unknown")) %>%
+  filter(Zoning_2026 %in% c("LDR", "MDR")) %>%
   mutate(
     popup = paste0(
       SITEADDRESS, "<br>",
       "Nonconforming because:", "<br>",
-      CLASSDSCRP, " in ", Zoning_2026
+      conforming_ZAP
     )
   )
 
 nonconformingMap <- leaflet(nonconformingLDR %>% st_transform(4326)) %>%
   addProviderTiles(providers$CartoDB.Positron) %>%
   addPolygons(
-    data = zap_2026 %>% filter(Zoning_2026 == "LDR") %>% st_transform(4326),
-    weight = .1, opacity = .1, color = "Grey"
+    data = zap_2026 %>% 
+      filter(Zoning_2026 %in% c("LDR", "MDR")) %>% 
+      st_transform(4326),
+    weight = 1, fillOpacity = .1, color = "Grey"
   ) %>%
   addPolygons(
     weight = .2, 
@@ -333,24 +285,44 @@ nonconformingMap <- leaflet(nonconformingLDR %>% st_transform(4326)) %>%
     popup = ~popup
   ) %>%
   addLegend(
-    title = "Non conforming uses in LDR",
+    title = "Non conforming uses in LDR/MDR",
     "topright",
-    colors = c("Grey", "Blue"), labels = c("LDR zones", "Non conforming parcels")
+    colors = c("Grey", "Blue"), labels = c("LDR/MDR zones", "Non conforming parcels")
   )
 
 nonconformingMap
 
 ```
 
-The above map shows LDR zones in the proposed 2026 ZAP plan, and highlights parcels that are non-conforming based on the parcel description. I label a parcel as non-conforming in LDR if it is something other than a single family house, residential vacant land, an aged home, or a detached row building (likely a townhouse which is allowed in LDR, a very welcome change from the 2023 proposal). This is an *undercount* because it only shows parcels that are non-conforming because of their land use class, but there are also parcels that are non-conforming because of size, setbacks, etc. Had I more time with the shapefile, I could have forced city staffers to read even more analysis that grouped parcels by street segment, calculated average lot frontages per block, and estimated non-conforming parcels by building and parcel dimension.
+The above map shows LDR zones in the proposed 2026 ZAP plan, and highlights parcels that are non-conforming based on the parcel description.
 
-Why does it matter if a parcel is non-conforming? If an apartment building in an LDR zone is damaged by weather or fire, it cannot be rebuilt as an apartment buildingl those homes will be lost and the residing families will be displaced. If a family lives in one of the 5,364 duplexes in an LDR zone, they're legally prohibited from building an addition (or ADU) since it would be classified as an increase in intensity.
+I label a parcel as non-conforming in LDR:
 
-One of the stated purposes of this zoning code is to gradually eliminate non-conforming uses and reuse or eliminate non-conforming structures. Thousands of our neighbors (including me!) live in non-conforming residential structures because the code is too strict.
+- by class description, if it is something other than a single family house, residential vacant land, an aged home, or a detached row building (likely a townhouse which is allowed in LDR, a very welcome change from the 2023 proposal),
+- by lot coverage, if the total lot coverage of buildings on the parcel is over 50% of the area of the parcel.
+
+This is an *undercount* because it only shows parcels that are non-conforming because of their land use class or lot coverage, but there are also parcels that are non-conforming because of size, setbacks, height, frontage, etc.
 
 What's the cause of most of the non-conforming labels in the above map?
 
-```{r nonconformingCases}
+```{r nonconformingTable}
+
+conformings %>%
+  st_drop_geometry() %>%
+  filter(Zoning_2026 %in% c("LDR", "MDR")) %>% 
+  group_by(conforming_ZAP, Zoning_2026) %>%
+  count() %>%
+  ungroup() %>% 
+  arrange(Zoning_2026, n) %>%
+  group_by(Zoning_2026) %>%
+  mutate(Percent_of_zone = 100 * n / sum(n)) %>%
+  knitr::kable()
+
+```
+
+Here's a table of class usages that result in nonconforming labels:
+
+```{r}
 
 nonconformingLDR %>%
   st_drop_geometry() %>% 
@@ -367,38 +339,45 @@ nonconformingLDR %>%
 
 ```
 
-The vast majority (over 80%) of non-conforming parcels in LDR are duplexes. Over 14% of all parcels in LDR are duplexes. Duplexes should be encouraged in LDR.
+The vast majority (over 80%) of non-conforming parcels in LDR are duplexes. Over 14% of all parcels in LDR are duplexes.
 
-Appartments are only 265 of the nonconforming parcels, but those 265 parcels contain (according to 2022 parcel data) `r nonconformingLDR %>% filter(CLASSDSCRP == "Apartment") %>% pull(NORESUNITS) %>% sum()` residential units. When we plot them on a map, it's clear that apartments in LDR are clustered: in the southeast, in Swillburg, Upper Monroe and Park Ave, and in the northwest between Dewey and Lake, north of Driving Park. These areas should probably be rezoned to MDR or one of the neighborhood center classifications, however that opportunity was apparently lost with the Roc2034 adoption. The possibility of those neighborhoods losing housing due to normal attrition and aging of apartment buildings should concern the city as well as businesses in those neighborhoods, who would be losing customers. The city [acknowledges in responses to ZAP comments](https://rochesterzap.com/wp-content/uploads/2026/05/FGEIS-Comment-Response-Summary-Table.pdf) that the density in Park Ave contributes to the success of businesses in the area.^["More tall buildings with residents offers more customers for local businesses. The few tall apartment buildings along Park Ave contribute to the success of businesses along that corridor." page 16] An easy way to address this is to allow new duplexes in LDR, which would allow LDR to be more flexible to responses in residential demand.
+```{r}
 
-### Changes from 2023 to 2026
-
-```{r changes2023to2026}
-
-changes_from_draft <- parcelsJoin %>%
-  filter(Zoning_2026 != Zoning_2023) %>%
-  select(SITEADDRESS, BISZONING, Zoning_2023, Zoning_2026) %>%
-  mutate(
-    popup = paste0(
-      SITEADDRESS, " is ", BISZONING, "<br>",
-      "2023: ", Zoning_2023, "<br>",
-      "2026: ", Zoning_2026
-      )
-    ) %>%
-  st_transform(4326)
-
-leaflet(changes_from_draft) %>%
-  addProviderTiles(providers$CartoDB.Positron) %>%
-  addPolygons(weight = .2, opacity = .2, color = "Red", popup = ~popup)
-
+conformings %>% 
+  st_drop_geometry() %>% 
+  filter(! is.na(conforming_cov)) %>% 
+  group_by(duplex = CLASSDSCRP == '2 Family Residential', conforming_cov) %>% 
+  count() %>% 
+  knitr::kable()
 
 ```
 
+Duplexes in LDR are also more likely (7% compared to 2.5%) to be nonconforming due to lot coverage. Duplexes should be encouraged in LDR, but let's make sure we contine to protect them by preserving duplex rights from abandonment/destruction.
+
+Likely due to additional setback requirements (which I didn't have time to model), a large majority of properties in LDR and MDR are in compliance with lot coverage requirements:
+
+```{r}
+
+conformings %>% 
+  filter(Zoning_2026 %in% c("LDR", "MDR")) %>% 
+  ggplot(aes(x = lotCoveragePercent, group = Zoning_2026, fill = Zoning_2026)) + 
+  geom_density(alpha = .5) + 
+  xlim(c(0, 100)) + 
+  theme_bw() +
+  xlab("Lot coverage percent") +
+  ylab("Density of LDR/MDR parcels")
+
+```
+
+Why does it matter if a parcel is non-conforming? If an apartment building in an LDR zone is damaged by weather or fire, it cannot be rebuilt as an apartment buildingl those homes will be lost and the residing families will be displaced. If a family lives in one of the 5,364 duplexes in an LDR zone, they're legally prohibited from building an addition (or ADU) since it would be classified as an increase in intensity.
+
+One of the stated purposes of this zoning code is to gradually eliminate non-conforming uses and reuse or eliminate non-conforming structures. Thousands of our neighbors (including me!) live in non-conforming residential structures because the code is too strict.
+
+Appartments are only 265 of the nonconforming parcels, but those 265 parcels contain (according to 2022 parcel data) `r nonconformingLDR %>% filter(CLASSDSCRP == "Apartment") %>% pull(NORESUNITS) %>% sum()` residential units. When we plot them on a map, it's clear that apartments in LDR are clustered: in the southeast, in Swillburg, Upper Monroe and Park Ave, and in the northwest between Dewey and Lake, north of Driving Park. These areas should probably be rezoned to MDR or one of the neighborhood center classifications, however that opportunity was apparently lost with the Roc2034 adoption. The possibility of those neighborhoods losing housing due to normal attrition and aging of apartment buildings should concern the city as well as businesses in those neighborhoods, who would be losing customers. The city [acknowledges in responses to ZAP comments](https://rochesterzap.com/wp-content/uploads/2026/05/FGEIS-Comment-Response-Summary-Table.pdf) that the density in Park Ave contributes to the success of businesses in the area.^["More tall buildings with residents offers more customers for local businesses. The few tall apartment buildings along Park Ave contribute to the success of businesses along that corridor." page 16] An easy way to address this is to allow new duplexes in LDR, which would allow LDR to be more flexible to responses in residential demand.
+
 ## Conclusion
 
-
-
-
+The extra time for public comment allowed me to look at nonconforming parcels due to lot coverage.  Due to time constraints the above code is an informed estimate rather than a definitive classification, but it shows that 2% of LDR parcels and over 6% of MDR parcels are non-conforming due to lot coverage. Lot coverage rules seem to not be a big issue for LDR zones, but the city should look at relaxing lot coverage rules in MDR zones.
 
 ### Data & Reproducibility
 
